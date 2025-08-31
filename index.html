@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Event Extractor (v7 - Verification UI)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <style>
+        
+        /* Fixed table input styling */
+        .table-input {
+            background-color: rgba(30, 41, 59, 0.9);
+            color: #e2e8f0;
+            width: 100%;
+            border: 1px solid rgba(100, 116, 139, 0.6);
+            padding: 6px 8px;
+            border-radius: 5px;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+        
+        .table-input:focus {
+            outline: none;
+            border-color: #2dd4bf;
+            box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.25);
+            background-color: rgba(30, 41, 59, 1);
+        }
+        
+        .table-input:hover {
+            border-color: #94a3b8;
+            background-color: rgba(30, 41, 59, 0.95);
+        }
+        
+        .table-input::placeholder {
+            color: #94a3b8;
+            opacity: 0.7;
+        }
+        
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.6);
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 5px;
+            border: 2px solid rgba(30, 41, 59, 0.6);
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        
+        /* PDF viewer styling */
+        #pdf-viewer {
+            min-height: 50vh;
+            background-color: #f8fafc;
+            border-radius: 8px;
+        }
+        
+        /* Button styling */
+        .action-btn {
+            transition: all 0.2s ease;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Table styling */
+        .results-table {
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        
+        .results-table th {
+            background-color: #1e293b;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .results-table tr {
+            transition: background-color 0.2s;
+        }
+        
+        .results-table tr:hover {
+            background-color: rgba(30, 41, 59, 0.7);
+        }
+        
+        /* Loading animation */
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .loading {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        </style>
+</head>
+<body class="bg-slate-900 text-white font-sans flex flex-col items-center justify-center min-h-screen p-4">
+    
+    <div class="bg-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-7xl space-y-6 border border-slate-700">
+        <div class="text-center">
+            <h1 class="text-3xl font-bold text-teal-400">AI-Assisted Event Extractor</h1>
+            <p class="text-slate-400 mt-2">AI extracts the data, you provide the final, quick verification.</p>
+        </div>
+        
+        <!-- Main controls section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+            <div class="space-y-4">
+                <label for="file-upload" class="block text-sm font-medium text-slate-300">1. Upload PDF Document</label>
+                <div id="drop-zone" class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-600 border-dashed rounded-md cursor-pointer hover:border-teal-500 transition-colors">
+                    <div class="space-y-1 text-center">
+                        <svg class="mx-auto h-12 w-12 text-slate-500" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4V12a4 4 0 014-4h12l4 4h12a4 4 0 014 4z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                        <div class="flex text-sm text-slate-400"><p class="pl-1">Click to upload or drag and drop</p></div>
+                        <p class="text-xs text-slate-500">PDF up to 10MB</p>
+                        <p id="file-name" class="text-sm font-semibold text-teal-400 pt-2"></p>
+                    </div>
+                </div>
+                <input id="file-upload" name="file-upload" type="file" class="sr-only" accept=".pdf">
+            </div>
+            
+            <div class="space-y-4">
+                <div class="space-y-2">
+                    <label for="api-key-input" class="block text-sm font-medium text-slate-300">2. Your Gemini API Key</label>
+                    <input type="password" id="api-key-input" class="block w-full bg-slate-700 border border-slate-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-teal-500 focus:border-teal-500 sm:text-sm" placeholder="Enter your API key here">
+                </div>
+                <button id="process-button" disabled class="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 disabled:bg-slate-700 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 focus:ring-offset-slate-900">
+                    <svg id="spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span id="button-text">3. Run AI Extraction</span>
+                </button>
+            </div>
+        </div>
+        
+        <div id="error-message" class="hidden p-4 bg-red-900/50 text-red-300 border border-red-700 rounded-md"></div>
+        
+        <!-- Verification UI section -->
+        <div id="results-section" class="hidden space-y-4">
+            <div class="text-center">
+                <h2 class="text-xl font-semibold text-slate-200">4. Verify, Correct, and Download</h2>
+                <p class="text-slate-400 text-sm">The AI has done its best. Quickly correct any errors in the table below before downloading.</p>
+            </div>
+                <div class="flex gap-4">
+                    <button id="download-json" class="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-md text-sm font-medium">Download JSON</button>
+                    <button id="download-csv" class="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-md text-sm font-medium">Download CSV</button>
+                    <button id="add-row" class="flex-1 py-2 px-4 bg-teal-700 hover:bg-teal-600 rounded-md text-sm font-medium">Add Row</button>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4" style="max-height: 60vh;">
+                    <div class="overflow-auto bg-slate-900/50 rounded-lg border border-slate-700">
+                        <table class="min-w-full divide-y divide-slate-700">
+                            <thead class="bg-slate-800 sticky top-0">
+                                <tr>
+                                    <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Date</th>
+                                    <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Start Time</th>
+                                    <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">End Time</th>
+                                    <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Description</th>
+                                    <th scope="col" class="px-3 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider w-16">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-table-body" class="bg-slate-800/50 divide-y divide-slate-700"></tbody>
+                        </table>
+                    </div>
+                    <div class="overflow-auto border border-slate-700 rounded-lg">
+                        <iframe id="pdf-viewer" class="w-full h-full"></iframe>
+                    </div>
+                </div>
+        </div>
+    </div>
+    
+    <script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
+
+// --- DOM Elements ---
+const dropZone = document.getElementById('drop-zone');
+const fileUpload = document.getElementById('file-upload');
+const fileNameDisplay = document.getElementById('file-name');
+const apiKeyInput = document.getElementById('api-key-input');
+const processButton = document.getElementById('process-button');
+const buttonText = document.getElementById('button-text');
+const spinner = document.getElementById('spinner');
+const errorMessage = document.getElementById('error-message');
+const resultsSection = document.getElementById('results-section');
+const resultsTableBody = document.getElementById('results-table-body');
+const downloadJsonButton = document.getElementById('download-json');
+const downloadCsvButton = document.getElementById('download-csv');
+const addRowButton = document.getElementById('add-row');
+const pdfViewer = document.getElementById('pdf-viewer');
+
+// --- State ---
+let selectedFile = null;
+const API_BASE_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=";
+
+// --- Event Listeners ---
+dropZone.addEventListener("click", () => fileUpload.click());
+dropZone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropZone.classList.add("border-teal-500");
+});
+dropZone.addEventListener("dragleave", (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("border-teal-500");
+});
+dropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("border-teal-500");
+  if (e.dataTransfer.files.length > 0) handleFileSelect(e.dataTransfer.files[0]);
+});
+fileUpload.addEventListener("change", (e) => {
+  if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+});
+processButton.addEventListener("click", processPdf);
+downloadJsonButton.addEventListener("click", downloadJson);
+downloadCsvButton.addEventListener("click", downloadCsv);
+addRowButton.addEventListener("click", addEmptyRow);
+
+// --- Functions ---
+function handleFileSelect(file) {
+  if (file && file.type === "application/pdf") {
+    selectedFile = file;
+    fileNameDisplay.textContent = file.name;
+    processButton.disabled = false;
+    hideError();
+    resultsSection.classList.add("hidden");
+
+    // Display PDF in iframe
+    const fileURL = URL.createObjectURL(file);
+    pdfViewer.src = fileURL;
+  } else {
+    showError("Please select a valid PDF file.");
+    selectedFile = null;
+    fileNameDisplay.textContent = "";
+    processButton.disabled = true;
+    pdfViewer.src = "";
+  }
+}
+
+function setLoading(isLoading, message = "3. Run AI Extraction") {
+  spinner.classList.toggle("hidden", !isLoading);
+  buttonText.textContent = message;
+  processButton.disabled = isLoading;
+  fileUpload.disabled = isLoading;
+  apiKeyInput.disabled = isLoading;
+}
+
+function showError(message) {
+  errorMessage.textContent = message;
+  errorMessage.classList.remove("hidden");
+}
+
+function hideError() {
+  errorMessage.classList.add("hidden");
+}
+
+function safeJSONParse(text) {
+  try {
+    // strip markdown fences if present
+    const clean = text.replace(/```json|```/g, "").trim();
+    return JSON.parse(clean);
+  } catch (e) {
+    console.error("JSON parse failed", e, text);
+    return null;
+  }
+}
+
+async function processPdf() {
+  const apiKey = apiKeyInput.value.trim();
+  if (!selectedFile) {
+    showError("No file selected.");
+    return;
+  }
+  if (!apiKey) {
+    showError("Please enter your Gemini API Key.");
+    return;
+  }
+
+  hideError();
+  resultsSection.classList.add("hidden");
+
+  try {
+    setLoading(true, "Reading PDF...");
+    const fileAsArrayBuffer = await selectedFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument(fileAsArrayBuffer).promise;
+    const imageParts = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2.5 });
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      await page.render({ canvasContext: context, viewport: viewport }).promise;
+      const base64ImageData = canvas.toDataURL("image/jpeg", 0.9).split(",")[1];
+      imageParts.push({ inlineData: { mimeType: "image/jpeg", data: base64ImageData } });
+    }
+
+    setLoading(true, "Step 1/2: Extracting...");
+    const extractionPrompt =
+      "You are a data entry specialist. Perform a fast first pass on the document images. Extract all chronological events. Respond ONLY with a JSON array of objects.";
+    const eventSchema = {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          date: { type: "STRING" },
+          startTime: { type: "STRING" },
+          endTime: { type: "STRING" },
+          description: { type: "STRING" },
+        },
+        required: ["date", "startTime", "description"],
+      },
+    };
+    const extractionPayload = {
+      contents: [{ parts: [{ text: extractionPrompt }, ...imageParts] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: eventSchema },
+    };
+    const firstPassResponse = await makeApiCall(apiKey, extractionPayload);
+    const firstPassText =
+      firstPassResponse?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    if (!firstPassText) throw new Error("Step 1 failed: No content returned.");
+
+    setLoading(true, "Step 2/2: Verifying...");
+    const verificationPrompt = `You are a precise QA auditor for maritime logistics. Correct and verify the JSON.
+Rules:
+1. Combine ranges into single events.
+2. Fix OCR digit mistakes in dates/times.
+3. Remove hallucinated events.
+4. Fill missing fields with "N/A".
+Return only corrected JSON.
+Initial JSON: ${firstPassText}`;
+
+    const verificationPayload = {
+      contents: [{ parts: [{ text: verificationPrompt }, ...imageParts] }],
+      generationConfig: { responseMimeType: "application/json", responseSchema: eventSchema },
+    };
+    const finalResponse = await makeApiCall(apiKey, verificationPayload);
+    const finalText = finalResponse?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    if (!finalText) throw new Error("Step 2 failed: No content returned.");
+
+    const verifiedEvents = safeJSONParse(finalText);
+    if (!verifiedEvents) throw new Error("Final JSON parse failed.");
+
+    displayResults(verifiedEvents);
+  } catch (error) {
+    console.error("Error processing PDF:", error);
+    showError(`Error: ${error.message}`);
+  } finally {
+    setLoading(false, "3. Run AI Extraction");
+  }
+}
+
+async function makeApiCall(apiKey, payload) {
+  const response = await fetch(API_BASE_URL + apiKey, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    let errorBody = {};
+    try {
+      errorBody = await response.json();
+    } catch {}
+    throw new Error(`API failed: ${errorBody.error?.message || response.statusText}`);
+  }
+  return await response.json();
+}
+
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, (m) => {
+    const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
+    return map[m];
+  });
+}
+
+function displayResults(events) {
+  resultsTableBody.innerHTML = "";
+  if (!events || events.length === 0) {
+    resultsTableBody.innerHTML =
+      '<tr><td colspan="5" class="text-center py-4 text-slate-400">No events were extracted.</td></tr>';
+  } else {
+    events.forEach((event) => addTableRow(event));
+  }
+  resultsSection.classList.remove("hidden");
+}
+
+function addTableRow(event = { date: "", startTime: "", endTime: "", description: "" }) {
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td class="px-3 py-2"><input type="text" class="table-input" value="${escapeHtml(
+      event.date || ""
+    )}" placeholder="Date"></td>
+    <td class="px-3 py-2"><input type="text" class="table-input" value="${escapeHtml(
+      event.startTime || ""
+    )}" placeholder="Start Time"></td>
+    <td class="px-3 py-2"><input type="text" class="table-input" value="${escapeHtml(
+      event.endTime || ""
+    )}" placeholder="End Time"></td>
+    <td class="px-3 py-2"><input type="text" class="table-input" value="${escapeHtml(
+      event.description || ""
+    )}" placeholder="Description"></td>
+    <td class="px-3 py-2 text-center">
+      <button class="delete-row text-red-400 hover:text-red-300 text-sm font-medium">✕</button>
+    </td>
+  `;
+  resultsTableBody.appendChild(row);
+
+  row.querySelector(".delete-row").addEventListener("click", () => {
+    row.remove();
+    if (resultsTableBody.children.length === 0) {
+      resultsTableBody.innerHTML =
+        '<tr><td colspan="5" class="text-center py-4 text-slate-400">No events to display.</td></tr>';
+    }
+  });
+}
+
+function addEmptyRow() {
+  addTableRow();
+}
+
+function getCorrectedDataFromTable() {
+  const data = [];
+  const rows = resultsTableBody.querySelectorAll("tr");
+
+  rows.forEach((row) => {
+    if (row.cells.length === 1) return; // skip "no events" row
+    const inputs = row.querySelectorAll("input");
+    if (inputs.length === 4) {
+      data.push({
+        date: inputs[0].value,
+        startTime: inputs[1].value,
+        endTime: inputs[2].value,
+        description: inputs[3].value,
+      });
+    }
+  });
+  return data;
+}
+
+function downloadFile(filename, content, mimeType) {
+  const a = document.createElement("a");
+  const blob = new Blob([content], { type: mimeType });
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+function downloadJson() {
+  const correctedData = getCorrectedDataFromTable();
+  if (correctedData.length > 0) {
+    const jsonContent = JSON.stringify(correctedData, null, 2);
+    downloadFile("verified_events.json", jsonContent, "application/json");
+  } else {
+    showError("No data to download.");
+  }
+}
+
+function downloadCsv() {
+  const correctedData = getCorrectedDataFromTable();
+  if (correctedData.length > 0) {
+    const header = "date,startTime,endTime,description\n";
+    const rows = correctedData
+      .map((e) => {
+        const date = e.date ? `"${e.date.replace(/"/g, '""')}"` : "";
+        const startTime = e.startTime ? `"${e.startTime.replace(/"/g, '""')}"` : "";
+        const endTime = e.endTime ? `"${e.endTime.replace(/"/g, '""')}"` : "";
+        const desc = e.description ? `"${e.description.replace(/"/g, '""')}"` : "";
+        return `${date},${startTime},${endTime},${desc}`;
+      })
+      .join("\n");
+    const csvContent = header + rows;
+    downloadFile("verified_events.csv", csvContent, "text/csv;charset=utf-8;");
+  } else {
+    showError("No data to download.");
+  }
+}
+</script>
+
+</body>
+</html>
